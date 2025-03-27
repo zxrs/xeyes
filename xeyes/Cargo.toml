@@ -1,0 +1,15 @@
+[package]
+name = "xeyes"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+hook = { path = "../hook" }
+
+[dependencies.windows]
+version = "0.61"
+features = [
+  "Win32_Graphics_Gdi",
+  "Win32_UI_WindowsAndMessaging",
+]
