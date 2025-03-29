@@ -81,9 +81,7 @@ impl<T> Drop for MapView<T> {
 pub extern "system" fn DllMain(hinst: HINSTANCE, reason: u32, _: *const ()) -> bool {
     match reason {
         DLL_PROCESS_ATTACH => {
-            HINST.with(|g| {
-                g.set(Some(hinst));
-            });
+            HINST.set(Some(hinst));
             create_memory_map()
         }
         DLL_PROCESS_DETACH => delete_memory_map(),
@@ -93,11 +91,11 @@ pub extern "system" fn DllMain(hinst: HINSTANCE, reason: u32, _: *const ()) -> b
 }
 
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    let Ok(share_data) = MapView::<ShareData>::new() else {
-        return unsafe { CallNextHookEx(None, code, wparam, lparam) };
-    };
-
     if code == HC_ACTION as _ && wparam.0 == WM_MOUSEMOVE as _ {
+        let Ok(share_data) = MapView::<ShareData>::new() else {
+            return unsafe { CallNextHookEx(None, code, wparam, lparam) };
+        };
+
         unsafe { SendMessageW(share_data.hwnd, WM_HOOK_MOUSE_POS, None, Some(lparam)) };
     }
 
@@ -141,17 +139,13 @@ fn create_memory_map() -> Result<()> {
             NAME,
         )?
     };
-    MAP_FILE.with(|g| {
-        g.set(Some(hmapfile));
-    });
+    MAP_FILE.set(Some(hmapfile));
     Ok(())
 }
 
 fn delete_memory_map() -> Result<()> {
-    MAP_FILE.with(|g| {
-        if let Some(mut mapfile) = g.get() {
-            unsafe { mapfile.free() };
-        }
-    });
+    if let Some(mut mapfile) = MAP_FILE.get() {
+        unsafe { mapfile.free() };
+    }
     Ok(())
 }
