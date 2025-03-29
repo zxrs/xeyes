@@ -1,6 +1,5 @@
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::{cell::Cell, ops::DerefMut};
+use std::cell::Cell;
+use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, ensure};
 use windows::{
@@ -35,42 +34,40 @@ struct ShareData {
     hwnd: HWND,
 }
 
-struct MapView<T> {
+struct MapView {
     handle: HANDLE,
     map_view_address: MEMORY_MAPPED_VIEW_ADDRESS,
-    _p: PhantomData<T>,
 }
 
-impl<T> MapView<T> {
+impl MapView {
     fn new() -> Result<Self> {
         let handle = unsafe { OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, false, NAME)? };
 
         let map_view_address =
-            unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size_of::<T>()) };
+            unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size_of::<ShareData>()) };
         ensure!(!map_view_address.Value.is_null(), "failed to get map view.");
 
         Ok(Self {
             handle,
             map_view_address,
-            _p: PhantomData,
         })
     }
 }
 
-impl<T> Deref for MapView<T> {
-    type Target = T;
+impl Deref for MapView {
+    type Target = ShareData;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(self.map_view_address.Value as *const T) }
+        unsafe { &*(self.map_view_address.Value as *const ShareData) }
     }
 }
 
-impl<T> DerefMut for MapView<T> {
+impl DerefMut for MapView {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(self.map_view_address.Value as *mut T) }
+        unsafe { &mut *(self.map_view_address.Value as *mut ShareData) }
     }
 }
 
-impl<T> Drop for MapView<T> {
+impl Drop for MapView {
     fn drop(&mut self) {
         unsafe { UnmapViewOfFile(self.map_view_address).ok() };
         unsafe { self.handle.free() };
@@ -92,7 +89,7 @@ pub extern "system" fn DllMain(hinst: HINSTANCE, reason: u32, _: *const ()) -> b
 
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as _ && wparam.0 == WM_MOUSEMOVE as _ {
-        let Ok(share_data) = MapView::<ShareData>::new() else {
+        let Ok(share_data) = MapView::new() else {
             return unsafe { CallNextHookEx(None, code, wparam, lparam) };
         };
 
@@ -108,7 +105,7 @@ pub fn set_hook(hwnd: HWND) -> bool {
 }
 
 fn set_hook_impl(hwnd: HWND) -> Result<()> {
-    let mut share_data = MapView::<ShareData>::new()?;
+    let mut share_data = MapView::new()?;
     share_data.hwnd = hwnd;
 
     let hhook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(hook_proc), HINST.get(), 0)? };
@@ -123,7 +120,7 @@ pub fn end_hook() -> bool {
 }
 
 fn end_hook_impl() -> Result<()> {
-    let mut share_data = MapView::<ShareData>::new()?;
+    let mut share_data = MapView::new()?;
     unsafe { share_data.hook.free() };
     Ok(())
 }
